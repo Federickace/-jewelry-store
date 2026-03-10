@@ -1,0 +1,11 @@
+# Ignora le cartelle pesanti di Node.js ovunque si trovino
+node_modules/
+
+# Ignora le variabili d'ambiente
+.env
+
+# Ignora la cartella di configurazione dell'editor JetBrains
+.idea/
+
+# Ignora i file di log di npm
+npm-debug.log*
