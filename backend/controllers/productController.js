@@ -25,6 +25,9 @@ exports.getAllProducts = async (req, res) => {
 
 exports.insertProduct = async (req, res) => {
     const newProduct = new Product({
+        listPrice: req.body.listPrice,
+        brand: req.body.brand,
+        gender: req.body.gender,
         barcode: req.body.barcode,
         name: req.body.name,
         type: req.body.type,
@@ -32,6 +35,8 @@ exports.insertProduct = async (req, res) => {
         oldPrice: req.body.oldPrice,
         newPrice: req.body.newPrice
     });
+
+    console.log(newProduct);
 
     try{
         const savedProduct = await newProduct.save();

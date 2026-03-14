@@ -7,10 +7,24 @@ const JewelryCategories = [
 ];
 
 const productSchema = new mongoose.Schema({
+    listPrice: {
+        type: Number,
+        required: true,
+        default: 0
+    },
+
+    brand: {
+        type: String
+    },
+
+    gender: {
+        type: String,
+        enum: ['uomo', 'donna', 'unisex'],
+    },
+
     barcode: {
         type: String,
         required: true,
-        unique: true,
         trim: true,
     },
     type: {

@@ -38,6 +38,7 @@ const ScannerPage = () => {
 
             if (response.ok && risultato.success && risultato.data) {
                 setProdotto(risultato.data);
+                console.log(risultato.newPrice);
             } else {
                 setErrore(`Nessun prodotto trovato con il codice: ${barcode}`);
             }

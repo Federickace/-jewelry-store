@@ -9,12 +9,17 @@ const categorieGioielli = [
     'fermacravatta', 'charm', 'cornice', 'altro'
 ];
 
+const gender = ['uomo', 'donna', 'unisex'];
+
 const CreatePage = () => {
     const [isScanning, setIsScanning] = useState(false);
     const scannedBarcode = useBarcodeScanner(isScanning); // Passiamo isScanning all'hook
 
     // Stato unico per raccogliere tutti i dati del form
     const [formData, setFormData] = useState({
+        listPrice: '',
+        brand: '',
+        gender: gender[0],
         barcode: '',
         type: categorieGioielli[0], // Impostiamo il primo valore di default
         name: '',
@@ -49,6 +54,7 @@ const CreatePage = () => {
         e.preventDefault(); // Evita il ricaricamento della pagina
         setLoading(true);
         setMessaggio({ testo: '', tipo: '' });
+        console.log(formData);
 
         try {
             // Nota: Controlla che la porta sia quella corretta del tuo backend (es. 3000 o 3001)
@@ -64,6 +70,9 @@ const CreatePage = () => {
                 setMessaggio({ testo: 'Gioiello inserito con successo! 🎉', tipo: 'success' });
                 // Svuotiamo il form dopo l'inserimento
                 setFormData({
+                    listPrice: '',
+                    brand: '',
+                    gender: gender[0],
                     barcode: '',
                     type: categorieGioielli[0],
                     name: '',
@@ -133,8 +142,24 @@ const CreatePage = () => {
                     ))}
                 </select>
 
+                <label>Marca </label>
+                <input type="text" name="brand" value={formData.brand} onChange={handleChange} style={inputStyle}  placeholder="Es. Morellato" />
+
+                <label>Sesso *</label>
+                <select name="gender" value={formData.gender} onChange={handleChange} style={inputStyle} >
+                    {gender.map(gender => (
+                        <option key={gender} value={gender}>{gender.charAt(0).toUpperCase() + gender.slice(1)}</option>
+                    ))}
+                </select>
+
+
                 <label>Nome Gioiello *</label>
                 <input type="text" name="name" value={formData.name} onChange={handleChange} style={inputStyle} required placeholder="Es. Collana con diamante" />
+
+                <div style={{ flex: 1 }}>
+                    <label>Prezzo di listino (€) *</label>
+                    <input type="number" name="listPrice" value={formData.listPrice} onChange={handleChange} style={inputStyle} required min="0" step="0.01" />
+                </div>
 
                 <label>Descrizione *</label>
                 <textarea name="description" value={formData.description} onChange={handleChange} style={{...inputStyle, minHeight: '80px'}} required placeholder="Breve descrizione del prodotto..."></textarea>
