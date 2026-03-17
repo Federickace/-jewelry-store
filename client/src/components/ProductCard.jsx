@@ -1,32 +1,33 @@
 import React, { useState } from 'react';
 
 const ProductCard = ({ prodotto }) => {
-    // Stati per gestire l'espansione e la modifica
-    // ... all'inizio del componente ...
     const [isExpanded, setIsExpanded] = useState(false);
-    const [nuovoPrezzo, setNuovoPrezzo] = useState(prodotto ? prodotto.newPrice : '');
 
-    // STATI CHE CONTROLLANO LA GRAFICA DEI PREZZI
-    const [prezzoAttuale, setPrezzoAttuale] = useState(prodotto ? prodotto.newPrice : '');
-    const [prezzoVecchio, setPrezzoVecchio] = useState(prodotto ? prodotto.oldPrice : '');
+    // Stati del prezzo a livello di GRUPPO
+    const [nuovoPrezzo, setNuovoPrezzo] = useState(prodotto.newPrice);
+    const [prezzoAttuale, setPrezzoAttuale] = useState(prodotto.newPrice);
+    const [prezzoVecchio, setPrezzoVecchio] = useState(prodotto.oldPrice);
+
     const [loading, setLoading] = useState(false);
     const [messaggio, setMessaggio] = useState({ testo: '', tipo: '' });
 
     if (!prodotto) return null;
 
-    // Funzione per inviare il nuovo prezzo al backend
-    const handleAggiornaPrezzo = async (e) => {
+    // Aggiorna tutti i pezzi di questo gruppo in un colpo solo
+    const handleAggiornaPrezzoGruppo = async (e) => {
         e.preventDefault();
         setLoading(true);
         setMessaggio({ testo: '', tipo: '' });
 
         try {
-            // Chiamata PUT per aggiornare il dato
-            const response = await fetch('http://localhost:3000/apiProduct/updatePrice', {
+            // Chiamiamo una rotta che aggiornerà il gruppo in base a barcode, brand e gender
+            const response = await fetch('http://localhost:3000/apiProduct/updatePriceByGroup', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     barcode: prodotto.barcode,
+                    brand: prodotto.brand,
+                    gender: prodotto.gender,
                     newPrice: Number(nuovoPrezzo)
                 })
             });
@@ -34,18 +35,15 @@ const ProductCard = ({ prodotto }) => {
             const risultato = await response.json();
 
             if (response.ok && risultato.success) {
-                setMessaggio({ testo: 'Prezzo aggiornato! ✅', tipo: 'success' });
-
-                // INVECE DI USARE IL DATO LOCALE, USIAMO QUELLI CHE CI MANDA IL DATABASE!
-                setPrezzoAttuale(risultato.data.newPrice);
-                setPrezzoVecchio(risultato.data.oldPrice);
-                setNuovoPrezzo(''); // Svuotiamo l'input per comodità
+                setMessaggio({ testo: `✅ Prezzo aggiornato su tutti i ${prodotto.quantita} pezzi!`, tipo: 'success' });
+                // Il vecchio prezzo "attuale" diventa il "prezzo vecchio" sbarrato
+                setPrezzoVecchio(prezzoAttuale);
+                setPrezzoAttuale(Number(nuovoPrezzo));
             } else {
-                setMessaggio({ testo: `Errore: ${risultato.message}`, tipo: 'error' });
+                setMessaggio({ testo: `❌ Errore: ${risultato.message}`, tipo: 'error' });
             }
         } catch (error) {
-            console.error(error);
-            setMessaggio({ testo: 'Errore di connessione.', tipo: 'error' });
+            setMessaggio({ testo: '❌ Errore di rete', tipo: 'error' });
         } finally {
             setLoading(false);
         }
@@ -53,7 +51,6 @@ const ProductCard = ({ prodotto }) => {
 
     return (
         <div
-            // Cliccando sulla card si espande (ma solo se non è già espansa)
             onClick={() => !isExpanded && setIsExpanded(true)}
             style={{
                 border: isExpanded ? '2px solid #2196F3' : '2px solid #d4af37',
@@ -70,7 +67,6 @@ const ProductCard = ({ prodotto }) => {
                 <h2 style={{ margin: '0 0 10px 0', color: '#333', textTransform: 'capitalize' }}>
                     {prodotto.name}
                 </h2>
-                {/* Bottone per chiudere la card se è espansa */}
                 {isExpanded && (
                     <button
                         onClick={(e) => { e.stopPropagation(); setIsExpanded(false); setMessaggio({testo:'', tipo:''}); }}
@@ -85,22 +81,20 @@ const ProductCard = ({ prodotto }) => {
                 {prodotto.type}
             </span>
 
-            <p><strong>Codice a Barre:</strong> {prodotto.barcode}</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
+                <p style={{ margin: 0 }}><strong>Codice a Barre:</strong> {prodotto.barcode}</p>
+                <div style={{ backgroundColor: '#e8f5e9', color: '#2e7d32', padding: '5px 10px', borderRadius: '5px', fontWeight: 'bold', fontSize: '14px', border: '1px solid #c8e6c9' }}>
+                    📦 Disp: {prodotto.quantita || 1}
+                </div>
+            </div>
 
-            {/* Mostra la descrizione completa solo se la card è espansa */}
-            {isExpanded ? (
-                <p style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-                    <strong>Descrizione:</strong> {prodotto.description}
-                </p>
-            ) : (
-                <p style={{ color: '#666' }}><em>Clicca per vedere i dettagli e modificare il prezzo...</em></p>
-            )}
+            <p><strong>Marca:</strong> {prodotto.brand}</p>
+            <p><strong>Sesso:</strong> {prodotto.gender}</p>
 
+            {/* PREZZI ATTUALI */}
             <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#fff', borderRadius: '8px' }}>
                 <p style={{ fontSize: '22px', margin: '0' }}>
                     <strong>Prezzo:</strong> €{prezzoAttuale}
-
-                    {/* MODIFICA QUI: controlliamo che sia > 0 ! */}
                     {prezzoVecchio > 0 && prezzoVecchio !== prezzoAttuale && (
                         <span style={{ textDecoration: 'line-through', color: '#999', fontSize: '16px', marginLeft: '10px' }}>
                             €{prezzoVecchio}
@@ -109,37 +103,53 @@ const ProductCard = ({ prodotto }) => {
                 </p>
             </div>
 
-            {/* SEZIONE DI MODIFICA PREZZO (Visibile solo se espansa) */}
-            {isExpanded && (
-                <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#e3f2fd', borderRadius: '8px', border: '1px solid #bbdefb' }}>
-                    <h4 style={{ margin: '0 0 10px 0', color: '#1565c0' }}>✏️ Modifica Prezzo</h4>
+            {/* SEZIONE ESPANSA */}
+            {isExpanded ? (
+                <div style={{ marginTop: '20px' }}>
 
-                    <form onSubmit={handleAggiornaPrezzo} style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        <input
-                            type="number"
-                            value={nuovoPrezzo}
-                            onChange={(e) => setNuovoPrezzo(e.target.value)}
-                            min="0" step="0.01" required
-                            style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc', width: '120px' }}
-                        />
-                        <button
-                            type="submit"
-                            disabled={loading || Number(nuovoPrezzo) === Number(prezzoAttuale)}
-                            style={{
-                                padding: '8px 15px', backgroundColor: '#2196F3', color: 'white', border: 'none',
-                                borderRadius: '4px', cursor: (loading || Number(nuovoPrezzo) === Number(prezzoAttuale)) ? 'not-allowed' : 'pointer'
-                            }}
-                        >
-                            {loading ? '...' : 'Aggiorna'}
-                        </button>
-                    </form>
+                    {/* 1. MODIFICA PREZZO GLOBALE (Per tutto il gruppo) */}
+                    <div style={{ padding: '15px', backgroundColor: '#e3f2fd', borderRadius: '8px', border: '1px solid #bbdefb', marginBottom: '20px' }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: '#1565c0' }}>✏️ Aggiorna il prezzo di tutti i {prodotto.quantita} pezzi</h4>
+                        <form onSubmit={handleAggiornaPrezzoGruppo} style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                            <input
+                                type="number" value={nuovoPrezzo} onChange={(e) => setNuovoPrezzo(e.target.value)}
+                                min="0" step="0.01" required
+                                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc', width: '120px' }}
+                            />
+                            <button
+                                type="submit" disabled={loading || Number(nuovoPrezzo) === Number(prezzoAttuale)}
+                                style={{
+                                    padding: '8px 15px', backgroundColor: '#2196F3', color: 'white', border: 'none',
+                                    borderRadius: '4px', cursor: (loading || Number(nuovoPrezzo) === Number(prezzoAttuale)) ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                {loading ? '...' : 'Aggiorna Tutti'}
+                            </button>
+                        </form>
+                        {messaggio.testo && (
+                            <p style={{ margin: '10px 0 0 0', fontSize: '14px', color: messaggio.tipo === 'success' ? '#2e7d32' : '#c62828', fontWeight: 'bold' }}>
+                                {messaggio.testo}
+                            </p>
+                        )}
+                    </div>
 
-                    {messaggio.testo && (
-                        <p style={{ margin: '10px 0 0 0', fontSize: '14px', color: messaggio.tipo === 'success' ? '#2e7d32' : '#c62828', fontWeight: 'bold' }}>
-                            {messaggio.testo}
-                        </p>
-                    )}
+                    {/* 2. LISTA DELLE DESCRIZIONI DEI SINGOLI PEZZI */}
+                    <div style={{ padding: '15px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #ddd' }}>
+                        <h4 style={{ margin: '0 0 15px 0', color: '#333' }}>📄 Dettagli dei singoli pezzi in magazzino</h4>
+
+                        {prodotto.prodottiIndividuali && prodotto.prodottiIndividuali.map((pezzoSingolo, index) => (
+                            <div key={pezzoSingolo._id} style={{ padding: '10px', borderBottom: index === prodotto.prodottiIndividuali.length - 1 ? 'none' : '1px solid #eee' }}>
+                                <p style={{ margin: '0 0 5px 0', fontWeight: 'bold', color: '#1565c0' }}>Pezzo #{index + 1}</p>
+                                <p style={{ margin: 0, fontSize: '14px', color: '#555', wordBreak: 'break-word' }}>
+                                    {pezzoSingolo.description}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+
                 </div>
+            ) : (
+                <p style={{ color: '#666', marginTop: '15px' }}><em>Clicca per vedere le descrizioni e modificare il prezzo...</em></p>
             )}
         </div>
     );

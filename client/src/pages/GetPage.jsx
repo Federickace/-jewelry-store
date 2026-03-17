@@ -2,6 +2,13 @@ import React, { useState, useEffect } from 'react';
 import HomeNavbar from "../components/Navbar.jsx";
 import ProductCard from '../components/ProductCard.jsx';
 
+// Elenco delle categorie
+const categorieGioielli = [
+    'anello', 'collana', 'orecchino', 'bracciale',
+    'orologio', 'ciondolo', 'spilla', 'gemelli',
+    'fermacravatta', 'charm', 'cornice', 'altro'
+];
+
 const GetPage = () => {
     // Stati per i dati
     const [prodotti, setProdotti] = useState([]);
@@ -11,10 +18,11 @@ const GetPage = () => {
     // Stati per la ricerca
     const [termineRicerca, setTermineRicerca] = useState('');
     const [attributoRicerca, setAttributoRicerca] = useState('name');
+    const [filtroGenere, setFiltroGenere] = useState('');
 
-    // NUOVI STATI PER LA PAGINAZIONE
+    // Stati per la paginazione
     const [paginaCorrente, setPaginaCorrente] = useState(1);
-    const prodottiPerPagina = 10; // Quanti gioielli vuoi vedere per ogni pagina? (Cambialo se vuoi!)
+    const prodottiPerPagina = 10;
 
     // Recupero dati iniziale
     useEffect(() => {
@@ -40,28 +48,60 @@ const GetPage = () => {
         fetchTuttiIProdotti();
     }, []);
 
-    // Se l'utente fa una nuova ricerca, riportiamolo alla Pagina 1
+    // Se l'utente fa una nuova ricerca, cambia attributo o filtro sesso, riportiamolo alla Pagina 1
     useEffect(() => {
         setPaginaCorrente(1);
-    }, [termineRicerca, attributoRicerca]);
+    }, [termineRicerca, attributoRicerca, filtroGenere]);
 
-    // 1. Prima filtriamo tutti i prodotti in base alla ricerca
-    const prodottiFiltrati = prodotti.filter(prodotto => {
-        if (!termineRicerca) return true;
-        const valoreAttributo = prodotto[attributoRicerca] ? String(prodotto[attributoRicerca]).toLowerCase() : '';
-        const termineMinuscolo = termineRicerca.toLowerCase();
-        return valoreAttributo.includes(termineMinuscolo);
+
+    // ==========================================
+    // NUOVA LOGICA: PRIMA RAGGRUPPA, POI FILTRA!
+    // ==========================================
+
+    // 1. RAGGRUPPIAMO TUTTO IL MAGAZZINO (Barcode + Brand + Gender)
+    const magazzinoRaggruppato = Object.values(prodotti.reduce((acc, prodotto) => {
+        const chiaveGruppo = `${prodotto.barcode}-${prodotto.brand}-${prodotto.gender}`;
+
+        if (!acc[chiaveGruppo]) {
+            acc[chiaveGruppo] = {
+                ...prodotto,
+                quantita: 1,
+                prodottiIndividuali: [prodotto]
+            };
+        } else {
+            acc[chiaveGruppo].quantita += 1;
+            acc[chiaveGruppo].prodottiIndividuali.push(prodotto);
+        }
+        return acc;
+    }, {}));
+
+    // 2. FILTRIAMO I GRUPPI GIA' FORMATI
+    const gruppiFiltrati = magazzinoRaggruppato.filter(gruppo => {
+        // Controlla la ricerca testuale
+        let corrispondeRicerca = true;
+        if (termineRicerca) {
+            const valoreAttributo = gruppo[attributoRicerca] ? String(gruppo[attributoRicerca]).toLowerCase() : '';
+            const termineMinuscolo = termineRicerca.toLowerCase();
+            corrispondeRicerca = valoreAttributo.includes(termineMinuscolo);
+        }
+
+        // Controlla il sesso (solo se cerchiamo per marca)
+        let corrispondeGenere = true;
+        if (attributoRicerca === 'brand' && filtroGenere !== '') {
+            corrispondeGenere = gruppo.gender === filtroGenere;
+        }
+
+        return corrispondeRicerca && corrispondeGenere;
     });
 
-    // 2. MATEMATICA DELLA PAGINAZIONE
+    // 3. MATEMATICA DELLA PAGINAZIONE SUI PRODOTTI FILTRATI
     const indiceUltimoProdotto = paginaCorrente * prodottiPerPagina;
     const indicePrimoProdotto = indiceUltimoProdotto - prodottiPerPagina;
 
-    // Questi sono i prodotti ESATTI che vedremo in questa pagina
-    const prodottiAttuali = prodottiFiltrati.slice(indicePrimoProdotto, indiceUltimoProdotto);
+    // Attenzione: ora usiamo 'gruppiFiltrati'
+    const prodottiAttuali = gruppiFiltrati.slice(indicePrimoProdotto, indiceUltimoProdotto);
+    const numeroTotalePagine = Math.ceil(gruppiFiltrati.length / prodottiPerPagina);
 
-    // Calcoliamo quante pagine ci servono in totale
-    const numeroTotalePagine = Math.ceil(prodottiFiltrati.length / prodottiPerPagina);
 
     // Stili
     const inputStyle = { padding: '10px', borderRadius: '5px', border: '1px solid #ccc', fontSize: '16px' };
@@ -80,25 +120,73 @@ const GetPage = () => {
             <h1 style={{ textAlign: 'center', color: '#333' }}>💎 Esplora e Cerca Gioielli</h1>
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap', backgroundColor: '#f5f5f5', padding: '20px', borderRadius: '8px', marginBottom: '30px' }}>
-                <select value={attributoRicerca} onChange={(e) => setAttributoRicerca(e.target.value)} style={inputStyle}>
+
+                {/* MENU ATTRIBUTO DI RICERCA */}
+                <select
+                    value={attributoRicerca}
+                    onChange={(e) => {
+                        setAttributoRicerca(e.target.value);
+                        setFiltroGenere('');
+                        setTermineRicerca('');
+                    }}
+                    style={inputStyle}
+                >
                     <option value="name">Cerca per Nome</option>
                     <option value="barcode">Cerca per Barcode</option>
-                    <option value="type">Cerca per Categoria (es. anello)</option>
+                    <option value="type">Cerca per Categoria</option>
                     <option value="description">Cerca in Descrizione</option>
+                    <option value="brand">Cerca per Marca</option>
                 </select>
-                <input type="text" placeholder={`Scrivi il ${attributoRicerca}...`} value={termineRicerca} onChange={(e) => setTermineRicerca(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '200px' }} />
+
+                {/* FILTRO GENERE */}
+                {attributoRicerca === 'brand' && (
+                    <select
+                        value={filtroGenere}
+                        onChange={(e) => setFiltroGenere(e.target.value)}
+                        style={{ ...inputStyle, backgroundColor: '#e3f2fd', borderColor: '#2196F3' }}
+                    >
+                        <option value="">Tutti i generi</option>
+                        <option value="uomo">Uomo</option>
+                        <option value="donna">Donna</option>
+                        <option value="unisex">Unisex</option>
+                    </select>
+                )}
+
+                {/* INPUT DI RICERCA */}
+                {attributoRicerca === 'type' ? (
+                    <select
+                        value={termineRicerca}
+                        onChange={(e) => setTermineRicerca(e.target.value)}
+                        style={{ ...inputStyle, flex: 1, minWidth: '200px' }}
+                    >
+                        <option value="">Tutte le categorie</option>
+                        {categorieGioielli.map(cat => (
+                            <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
+                        ))}
+                    </select>
+                ) : (
+                    <input
+                        type="text"
+                        placeholder={`Scrivi ${attributoRicerca === 'brand' ? 'la marca' : 'il ' + attributoRicerca}...`}
+                        value={termineRicerca}
+                        onChange={(e) => setTermineRicerca(e.target.value)}
+                        style={{ ...inputStyle, flex: 1, minWidth: '200px' }}
+                    />
+                )}
             </div>
 
+            {/* FEEDBACK CARICAMENTO/ERRORE */}
             {loading && <p style={{ textAlign: 'center', fontSize: '18px' }}>Caricamento gioielli in corso... ⏳</p>}
             {errore && <div style={{ backgroundColor: '#ffebee', color: '#c62828', padding: '15px', borderRadius: '8px', textAlign: 'center' }}>{errore}</div>}
 
+            {/* LISTA PRODOTTI E PAGINAZIONE */}
             {!loading && !errore && (
                 <div>
+                    {/* Aggiornato il contatore con gruppiFiltrati.length */}
                     <p style={{ textAlign: 'right', color: '#666', fontSize: '14px' }}>
-                        Trovati: {prodottiFiltrati.length} gioielli (Pagina {paginaCorrente} di {numeroTotalePagine || 1})
+                        Trovati: {gruppiFiltrati.length} modelli di gioielli (Pagina {paginaCorrente} di {numeroTotalePagine || 1})
                     </p>
 
-                    {/* LISTA DEI PRODOTTI (Solo quelli della pagina corrente!) */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                         {prodottiAttuali.length > 0 ? (
                             prodottiAttuali.map(prodotto => (
@@ -109,7 +197,6 @@ const GetPage = () => {
                         )}
                     </div>
 
-                    {/* I BOTTONCINI DELLA PAGINAZIONE */}
                     {numeroTotalePagine > 1 && (
                         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '30px', gap: '10px', flexWrap: 'wrap' }}>
 
@@ -121,7 +208,6 @@ const GetPage = () => {
                                 ⬅️ Precedente
                             </button>
 
-                            {/* Genera i bottoncini numerati in automatico! [1] [2] [3]... */}
                             {[...Array(numeroTotalePagine)].map((_, index) => {
                                 const numeroPag = index + 1;
                                 return (

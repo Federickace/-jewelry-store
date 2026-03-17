@@ -4,8 +4,8 @@ exports.getAllProducts = async (req, res) => {
     try {
         const products = await Product.find()
             .sort({
-                type: 1, // Ordina prima per tipologia (es. anello prima di orologio)
-                name: 1  // All'interno della stessa tipologia, ordina per nome (A-Z)
+                type: 1, // Order by type
+                name: 1  // order by A to Z in every type
             })
             .collation({locale: 'it', strength: 2});
 
@@ -56,7 +56,7 @@ exports.insertProduct = async (req, res) => {
 
 exports.getProductByBarcode = async (req, res) => {
     try{
-        const barcode = await Product.findOne({barcode: req.body.barcode});
+        const barcode = await Product.find({barcode: req.body.barcode});
         res.status(200).json({
             success: true,
             data: barcode,
@@ -122,27 +122,39 @@ exports.updatePriceByBarcode = async (req, res) => {
             return res.status(400).json({ success: false, message: "Barcode e nuovo prezzo sono obbligatori." });
         }
 
-        // 1. Troviamo il prodotto attuale per "ricordarci" qual era il suo prezzo prima della modifica
+        // 1. Troviamo UN prodotto come "campione" per ricordarci qual era il suo prezzo attuale
+        // (presumiamo che tutti i prodotti con lo stesso barcode abbiano lo stesso prezzo di partenza)
         const prodottoEsistente = await Product.findOne({ barcode: barcode });
 
         if (!prodottoEsistente) {
             return res.status(404).json({ success: false, message: "Nessun prodotto trovato." });
         }
 
-        // 2. Facciamo lo scambio: il 'newPrice' di prima diventa 'oldPrice', e inseriamo il nuovo prezzo
-        const prodottoAggiornato = await Product.findOneAndUpdate(
+        const prezzoDaSalvare = prodottoEsistente.newPrice;
+
+        // 2. Usiamo updateMany per aggiornare TUTTI i prodotti che hanno questo barcode in un colpo solo!
+        const risultatoAggiornamento = await Product.updateMany(
             { barcode: barcode },
             {
-                oldPrice: prodottoEsistente.newPrice, // Salviamo lo storico!
+                oldPrice: prezzoDaSalvare, // Salviamo lo storico per tutti
                 newPrice: newPrice
-            },
-            { returnDocument: 'after' }
+            }
         );
+
+        // 3. Siccome updateMany non restituisce il documento intero, impacchettiamo noi
+        // i dati che servono al frontend per aggiornare la grafica in tempo reale
+        const datiPerFrontend = {
+            barcode: barcode,
+            oldPrice: prezzoDaSalvare,
+            newPrice: newPrice,
+            quantitaModificata: risultatoAggiornamento.modifiedCount // Info comoda da avere!
+        };
 
         res.status(200).json({
             success: true,
-            data: prodottoAggiornato,
-            message: "Prezzo aggiornato con successo!"
+            data: datiPerFrontend,
+            // Mandiamo un messaggio dinamico che ci dice quanti ne ha aggiornati
+            message: `Prezzo aggiornato con successo su ${risultatoAggiornamento.modifiedCount} prodotti identici!`
         });
 
     } catch (error) {
@@ -151,3 +163,108 @@ exports.updatePriceByBarcode = async (req, res) => {
     }
 };
 
+// Aggiungi questo nel tuo file dei controller (es. productController.js)
+exports.deleteSingleProduct = async (req, res) => {
+    try {
+        const { id } = req.body; // <-- Riceviamo l'ID!
+
+        if (!id) {
+            return res.status(400).json({ success: false, message: "ID mancante." });
+        }
+
+        // Eliminiamo lo specifico pezzo fisico usando il suo _id univoco
+        const prodottoEliminato = await Product.findByIdAndDelete(id);
+
+        if (!prodottoEliminato) {
+            return res.status(404).json({ success: false, message: "Prodotto non trovato." });
+        }
+
+        res.status(200).json({ success: true, data: prodottoEliminato, message: "Scaricato con successo!" });
+
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Errore server.", error: error.message });
+    }
+};
+
+// Aggiungi questo nel tuo controller backend
+exports.updatePriceById = async (req, res) => {
+    try {
+        const { id, newPrice } = req.body;
+
+        if (!id || newPrice === undefined) {
+            return res.status(400).json({ success: false, message: "ID e nuovo prezzo sono obbligatori." });
+        }
+
+        const prodottoEsistente = await Product.findById(id);
+
+        if (!prodottoEsistente) {
+            return res.status(404).json({ success: false, message: "Nessun prodotto trovato." });
+        }
+
+        // Aggiorniamo SOLO questo specifico pezzo fisico
+        const prodottoAggiornato = await Product.findByIdAndUpdate(
+            id,
+            {
+                oldPrice: prodottoEsistente.newPrice,
+                newPrice: newPrice
+            },
+            { new: true } // Restituisce il documento aggiornato
+        );
+
+        res.status(200).json({
+            success: true,
+            data: prodottoAggiornato,
+            message: "Prezzo del singolo pezzo aggiornato con successo!"
+        });
+
+    } catch (error) {
+        console.error("Errore:", error);
+        res.status(500).json({ success: false, message: "Errore del server.", error: error.message });
+    }
+};
+
+exports.updatePriceByGroup = async (req, res) => {
+    try {
+        const { barcode, brand, gender, newPrice } = req.body;
+
+        if (!barcode || !brand || !gender || newPrice === undefined) {
+            return res.status(400).json({ success: false, message: "Barcode, Marca, Sesso e Nuovo Prezzo sono obbligatori." });
+        }
+
+        // 1. Troviamo UN prodotto come "campione" per ricordarci il prezzo attuale
+        const prodottoCampione = await Product.findOne({
+            barcode: barcode,
+            brand: brand,
+            gender: gender
+        });
+
+        if (!prodottoCampione) {
+            return res.status(404).json({ success: false, message: "Nessun prodotto trovato." });
+        }
+
+        const vecchioPrezzo = prodottoCampione.newPrice;
+
+        // 2. Usiamo updateMany per aggiornare TUTTI i prodotti che corrispondono a quel gruppo
+        const risultatoAggiornamento = await Product.updateMany(
+            {
+                barcode: barcode,
+                brand: brand,
+                gender: gender
+            },
+            {
+                oldPrice: vecchioPrezzo, // Salviamo lo storico
+                newPrice: newPrice
+            }
+        );
+
+        res.status(200).json({
+            success: true,
+            // Restituiamo il numero di oggetti modificati per sicurezza
+            message: `Prezzo aggiornato con successo su ${risultatoAggiornamento.modifiedCount} pezzi!`
+        });
+
+    } catch (error) {
+        console.error("Errore:", error);
+        res.status(500).json({ success: false, message: "Errore del server.", error: error.message });
+    }
+};
